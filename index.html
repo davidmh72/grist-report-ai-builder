@@ -3,6 +3,7 @@
   ============================================================
   REPORT AI BUILDER (report_ai_builder.html)
   Grist Report Widget — AI-powered conversational report builder
+  Split layout: Chat (left) + Report Spec (right)
   Requires: Cloudflare Worker backend for AI generation
   ============================================================
 -->
@@ -12,56 +13,76 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grist AI Report Builder</title>
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/handlebars@4.7.8/dist/handlebars.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; background: #f8f9fa; color: #333; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; background: #f8f9fa; color: #333; overflow: hidden; }
 
         /* Header */
-        .header { padding: 12px 16px; border-bottom: 1px solid #eee; background: #fff; display: flex; align-items: center; gap: 12px; }
+        .header { padding: 10px 16px; border-bottom: 1px solid #eee; background: #fff; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
         .header h1 { font-size: 15px; font-weight: 700; color: #264653; }
         .header .badge { font-size: 10px; background: #16b378; color: #fff; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
         .header .status { margin-left: auto; font-size: 11px; color: #999; }
+        .header .settings-btn { font-size: 11px; color: #16b378; cursor: pointer; padding: 4px 8px; border: 1px solid #d0ebe0; border-radius: 6px; }
+        .header .settings-btn:hover { background: #f0faf6; }
 
-        /* Chat area */
-        .chat { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-        .message { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
-        .message-ai { background: #fff; border: 1px solid #e8e8e8; align-self: flex-start; border-bottom-left-radius: 4px; }
-        .message-user { background: #16b378; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
-        .message-system { background: #f0f0f0; color: #666; align-self: center; font-size: 11px; padding: 6px 12px; border-radius: 8px; }
-        .message-ai .typing { display: inline-block; }
-        .message-ai .typing::after { content: "▋"; animation: blink 0.8s infinite; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        /* Settings bar */
+        .settings-bar { padding: 8px 16px; background: #fafafa; border-bottom: 1px solid #eee; display: none; flex-shrink: 0; }
+        .settings-bar.visible { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .settings-bar label { font-size: 10px; font-weight: 600; color: #555; }
+        .settings-bar input, .settings-bar select { padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; }
+        .settings-bar input[type="password"] { width: 200px; }
+        .settings-bar .sep { width: 1px; height: 20px; background: #ddd; }
 
-        /* Template preview */
-        .template-preview { background: #fff; border: 1px solid #d0ebe0; border-radius: 8px; margin-top: 8px; overflow: hidden; }
-        .template-preview-header { background: #f0faf6; padding: 8px 12px; font-size: 11px; font-weight: 600; color: #16b378; display: flex; justify-content: space-between; align-items: center; }
-        .template-preview-body { padding: 12px; max-height: 300px; overflow-y: auto; font-size: 12px; }
-        .template-actions { display: flex; gap: 6px; }
-        .template-actions button { padding: 4px 10px; border: 1px solid #d0ebe0; border-radius: 6px; background: #fff; font-size: 10px; font-weight: 600; cursor: pointer; }
-        .template-actions button:hover { background: #f0faf6; }
-        .template-actions .btn-save { background: #16b378; color: #fff; border-color: #16b378; }
-        .template-actions .btn-save:hover { background: #12956a; }
+        /* Main split layout */
+        .main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
-        /* Input area */
-        .input-area { padding: 12px 16px; border-top: 1px solid #eee; background: #fff; display: flex; gap: 8px; }
-        .input-area textarea { flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; font-family: inherit; resize: none; min-height: 42px; max-height: 120px; }
-        .input-area textarea:focus { outline: none; border-color: #16b378; }
-        .input-area button { padding: 10px 16px; background: #16b378; color: #fff; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-        .input-area button:hover { background: #12956a; }
-        .input-area button:disabled { background: #ccc; cursor: not-allowed; }
+        /* Left: Chat */
+        .chat-panel { display: flex; flex-direction: column; border-right: 1px solid #eee; background: #fff; }
+        .chat { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .message { max-width: 90%; padding: 8px 12px; border-radius: 10px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+        .message-ai { background: #f4f4f4; align-self: flex-start; border-bottom-left-radius: 3px; }
+        .message-user { background: #16b378; color: #fff; align-self: flex-end; border-bottom-right-radius: 3px; }
+        .message-system { background: #e8f5e9; color: #555; align-self: center; font-size: 10px; padding: 4px 10px; border-radius: 6px; }
+        .typing::after { content: "▋"; animation: blink 0.8s infinite; }
+        @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+        .chat-input { padding: 8px 12px; border-top: 1px solid #eee; display: flex; gap: 6px; }
+        .chat-input textarea { flex: 1; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: inherit; resize: none; min-height: 36px; max-height: 100px; }
+        .chat-input textarea:focus { outline: none; border-color: #16b378; }
+        .chat-input button { padding: 8px 14px; background: #16b378; color: #fff; border: none; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
+        .chat-input button:hover { background: #12956a; }
+        .chat-input button:disabled { background: #ccc; cursor: not-allowed; }
 
-        /* Settings panel */
-        .settings { padding: 12px 16px; border-top: 1px solid #eee; background: #fafafa; display: none; }
-        .settings.visible { display: block; }
-        .settings-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-        .settings-row label { font-size: 11px; font-weight: 600; color: #555; min-width: 80px; }
-        .settings-row select, .settings-row input { padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; }
-        .settings-row select { min-width: 120px; }
-        .settings-toggle { font-size: 11px; color: #16b378; cursor: pointer; padding: 4px 0; text-align: center; border-top: 1px solid #eee; }
-        .settings-toggle:hover { color: #12956a; }
+        /* Right: Report spec */
+        .spec-panel { display: flex; flex-direction: column; overflow-y: auto; padding: 12px 16px; }
+        .form-group { margin-bottom: 10px; }
+        .form-group label { display: block; font-size: 10px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: inherit; }
+        .form-group textarea { resize: vertical; }
+        .form-group .hint { font-size: 9px; color: #aaa; margin-top: 2px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .template-box { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 10px; min-height: 120px; }
+        .btn { padding: 7px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
+        .btn:hover { background: #f0f0f0; }
+        .btn-primary { background: #16b378; color: #fff; border-color: #16b378; }
+        .btn-primary:hover { background: #12956a; }
+        .btn-ai { background: #264653; color: #fff; border-color: #264653; }
+        .btn-ai:hover { background: #1a3540; }
+        .btn-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+        .status-msg { padding: 6px 10px; border-radius: 6px; font-size: 11px; margin-bottom: 8px; }
+        .status-success { background: #e1fede; color: #16b378; }
+        .status-error { background: #fef0f0; color: #e53935; }
+        .section-label { font-size: 10px; font-weight: 600; color: #16b378; text-transform: uppercase; letter-spacing: 0.5px; margin: 12px 0 6px; padding-top: 8px; border-top: 1px solid #eee; }
 
-        /* Error state */
-        .error-banner { background: #fef0f0; color: #e53935; padding: 8px 12px; font-size: 11px; text-align: center; }
+        /* Preview */
+        .preview-frame { border: 1px solid #ddd; border-radius: 6px; padding: 12px; background: #fff; min-height: 100px; overflow: auto; margin-top: 8px; }
+
+        /* Responsive: stack on narrow */
+        @media (max-width: 700px) {
+            .main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -69,44 +90,100 @@
     <h1>AI Report Builder</h1>
     <span class="badge">Beta</span>
     <span class="status" id="connection-status">Connecting...</span>
+    <span class="settings-btn" onclick="toggleSettings()">⚙️ Settings</span>
 </div>
 
-<div class="chat" id="chat"></div>
-
-<div class="settings-toggle" onclick="toggleSettings()">⚙️ Settings</div>
-<div class="settings" id="settings">
-    <div class="settings-row">
-        <label>Link Table</label>
-        <select id="cfg-link-table"></select>
-    </div>
-    <div class="settings-row">
-        <label>Filter Mode</label>
-        <select id="cfg-mode">
-            <option value="all">All</option>
-            <option value="record">Record</option>
-            <option value="filtered">Filtered</option>
-        </select>
-    </div>
-    <div class="settings-row">
-        <label>Output</label>
-        <select id="cfg-output">
-            <option value="screen">Screen</option>
-            <option value="print">Print</option>
-        </select>
-    </div>
-    <div class="settings-row">
-        <label>API Endpoint</label>
-        <input type="text" id="cfg-endpoint" placeholder="https://your-worker.workers.dev" style="flex:1;">
-    </div>
-    <div class="settings-row">
-        <label>Auth Token</label>
-        <input type="password" id="cfg-token" placeholder="Your secret token" style="flex:1;">
-    </div>
+<div class="settings-bar" id="settings-bar">
+    <label>API Endpoint:</label>
+    <input type="text" id="cfg-endpoint" placeholder="https://your-worker.workers.dev" style="width:260px;">
+    <span class="sep"></span>
+    <label>Gemini Key:</label>
+    <input type="password" id="cfg-token" placeholder="Stored locally only">
+    <span class="sep"></span>
+    <label><input type="checkbox" id="cfg-transparency"> Show outgoing data</label>
 </div>
 
-<div class="input-area">
-    <textarea id="user-input" placeholder="Describe the report you want..." rows="1" onkeydown="handleKey(event)"></textarea>
-    <button id="send-btn" onclick="sendMessage()">Send</button>
+<div class="main">
+    <!-- LEFT: Chat -->
+    <div class="chat-panel">
+        <div class="chat" id="chat"></div>
+        <div class="chat-input">
+            <textarea id="user-input" placeholder="Describe your report idea..." rows="1" onkeydown="handleKey(event)"></textarea>
+            <button id="send-btn" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <!-- RIGHT: Report Spec -->
+    <div class="spec-panel" id="spec-panel">
+        <div id="status-area"></div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Report Name</label>
+                <input type="text" id="rpt-name" placeholder="e.g. Sales Pipeline Dashboard">
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="rpt-desc" placeholder="Brief summary">
+            </div>
+        </div>
+
+        <div class="form-row-3">
+            <div class="form-group">
+                <label>Link Table</label>
+                <select id="rpt-link"><option value="">--</option></select>
+            </div>
+            <div class="form-group">
+                <label>Filter Mode</label>
+                <select id="rpt-mode">
+                    <option value="all">All</option>
+                    <option value="record">Record</option>
+                    <option value="filtered">Filtered</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Output</label>
+                <select id="rpt-output">
+                    <option value="screen">Screen</option>
+                    <option value="print">Print</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Data Tables (comma-separated)</label>
+            <input type="text" id="rpt-data" placeholder="e.g. Contacts,Deals,Tasks">
+        </div>
+
+        <div class="section-label">Requirements (refined by AI)</div>
+        <div class="form-group">
+            <textarea id="rpt-requirements" style="min-height:80px;" placeholder="The AI will help you build this..."></textarea>
+        </div>
+
+        <div class="btn-row">
+            <button class="btn btn-ai" onclick="generateTemplate()">🤖 Generate Template</button>
+            <button class="btn" onclick="previewReport()">👁 Preview</button>
+        </div>
+
+        <div class="section-label">Template HTML</div>
+        <div class="form-group">
+            <textarea class="template-box" id="rpt-template" placeholder="AI-generated template appears here..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Filters JSON (optional)</label>
+            <textarea id="rpt-filters" style="min-height:40px; font-family:monospace; font-size:10px;" placeholder='[{"field":"Status","type":"choice","table":"Contacts"}]'></textarea>
+        </div>
+
+        <div class="btn-row">
+            <button class="btn btn-primary" onclick="saveReport()">💾 Save Report</button>
+        </div>
+
+        <div id="preview-area" style="display:none;">
+            <div class="section-label">Preview</div>
+            <div class="preview-frame" id="preview-frame"></div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -114,18 +191,15 @@
     "use strict";
 
     const REPORTS_TABLE = "SysReports";
-    const WIDGET_NAME = "AI Report Builder";
-    const WIDGET_VERSION = "0.1.0";
+    const DEFAULT_ENDPOINT = "https://jolly-meadow-623d.david-m-hawley.workers.dev/";
 
     const chat = document.getElementById("chat");
     const input = document.getElementById("user-input");
     const sendBtn = document.getElementById("send-btn");
     const statusEl = document.getElementById("connection-status");
 
-    // ── State ─────────────────────────────────────────────────────────────
     let schema = {};
     let conversation = [];
-    let currentTemplate = null;
     let generating = false;
 
     // ── Grist Plugin API ──────────────────────────────────────────────────
@@ -171,90 +245,86 @@
         return text;
     }
 
+    // ── Settings ──────────────────────────────────────────────────────────
+    window.toggleSettings = () => document.getElementById("settings-bar").classList.toggle("visible");
+
+    function saveSettings() {
+        const endpoint = document.getElementById("cfg-endpoint").value.trim();
+        const token = document.getElementById("cfg-token").value.trim();
+        if (endpoint) localStorage.setItem("rpt_ai_endpoint", endpoint);
+        if (token) localStorage.setItem("rpt_ai_apikey", token);
+    }
+    function loadSettings() {
+        const endpoint = localStorage.getItem("rpt_ai_endpoint");
+        const token = localStorage.getItem("rpt_ai_apikey");
+        if (endpoint) document.getElementById("cfg-endpoint").value = endpoint;
+        if (token) document.getElementById("cfg-token").value = token;
+    }
+    document.getElementById("cfg-endpoint").addEventListener("change", saveSettings);
+    document.getElementById("cfg-token").addEventListener("change", saveSettings);
+
     // ── Chat UI ───────────────────────────────────────────────────────────
-    function addMessage(role, content, isHTML) {
+    function addMessage(role, content) {
         const div = document.createElement("div");
         div.className = "message message-" + role;
-        if (isHTML) div.innerHTML = content;
-        else div.textContent = content;
+        div.textContent = content;
         chat.appendChild(div);
         chat.scrollTop = chat.scrollHeight;
         return div;
     }
 
-    function addTemplatePreview(html) {
-        const container = document.createElement("div");
-        container.className = "template-preview";
-        container.innerHTML = '<div class="template-preview-header"><span>Generated Template</span><div class="template-actions"><button onclick="copyTemplate()">📋 Copy</button><button onclick="reviseTemplate()">✏️ Revise</button><button class="btn-save" onclick="saveTemplate()">💾 Save to Reports</button></div></div><div class="template-preview-body"><pre style="white-space:pre-wrap;font-size:11px;color:#555;max-height:200px;overflow-y:auto;"></pre></div>';
-        container.querySelector("pre").textContent = html.slice(0, 2000) + (html.length > 2000 ? "\n..." : "");
-        chat.appendChild(container);
+    function showTyping() {
+        const div = document.createElement("div");
+        div.className = "message message-ai";
+        div.innerHTML = '<span class="typing"></span>';
+        div.id = "typing-indicator";
+        chat.appendChild(div);
         chat.scrollTop = chat.scrollHeight;
     }
-
-    function showTyping() {
-        const div = addMessage("ai", '<span class="typing"></span>', true);
-        div.id = "typing-indicator";
-        return div;
-    }
-
-    function removeTyping() {
-        const el = document.getElementById("typing-indicator");
-        if (el) el.remove();
-    }
+    function removeTyping() { const el = document.getElementById("typing-indicator"); if (el) el.remove(); }
 
     // ── API Communication ─────────────────────────────────────────────────
-    function getEndpoint() {
-        return document.getElementById("cfg-endpoint").value.trim() || "";
-    }
+    function getEndpoint() { return document.getElementById("cfg-endpoint").value.trim() || DEFAULT_ENDPOINT; }
+    function getApiKey() { return (document.getElementById("cfg-token").value || "").trim().replace(/[^\x20-\x7E]/g, ""); }
 
-    async function callAI(messages) {
+    async function callAI(messages, generateMode) {
         const endpoint = getEndpoint();
-        if (!endpoint) {
-            addMessage("system", "⚠️ Set the API endpoint in Settings first.");
-            return null;
-        }
+        const apiKey = getApiKey();
+        if (!apiKey) { addMessage("system", "⚠️ Set your Gemini API key in Settings."); return null; }
 
         const body = {
             schema: getSchemaText(),
             tables: Object.keys(schema),
-            mode: document.getElementById("cfg-mode").value,
-            output: document.getElementById("cfg-output").value,
-            linkTable: document.getElementById("cfg-link-table").value,
-            messages: messages
+            mode: document.getElementById("rpt-mode").value,
+            output: document.getElementById("rpt-output").value,
+            linkTable: document.getElementById("rpt-link").value,
+            dataTables: document.getElementById("rpt-data").value,
+            requirements: document.getElementById("rpt-requirements").value,
+            messages: messages,
+            generateTemplate: !!generateMode
         };
 
+        if (document.getElementById("cfg-transparency").checked) {
+            addMessage("system", "📤 Sending: schema (" + body.tables.length + " tables), " + body.messages.length + " messages, mode=" + body.mode);
+        }
+
+        const headers = { "Content-Type": "application/json" };
+        if (apiKey) headers["X-Auth-Token"] = apiKey;
+
         try {
-            const token = document.getElementById("cfg-token").value.trim();
-            const res = await fetch(endpoint, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Auth-Token": token },
-                body: JSON.stringify(body)
-            });
-
-            if (!res.ok) {
-                const err = await res.text();
-                throw new Error(err || "Server error " + res.status);
-            }
-
-            const data = await res.json();
-            return data;
+            const res = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
+            if (!res.ok) { const err = await res.text(); throw new Error(err); }
+            return await res.json();
         } catch(e) {
-            addMessage("system", "⚠️ Error: " + e.message);
+            addMessage("system", "⚠️ " + e.message);
             return null;
         }
     }
 
     // ── Message handling ──────────────────────────────────────────────────
     window.handleKey = (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-        // Auto-resize textarea
-        setTimeout(() => {
-            input.style.height = "auto";
-            input.style.height = Math.min(input.scrollHeight, 120) + "px";
-        }, 0);
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        setTimeout(() => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 100) + "px"; }, 0);
     };
 
     window.sendMessage = async () => {
@@ -263,121 +333,140 @@
 
         addMessage("user", text);
         conversation.push({ role: "user", content: text });
-        input.value = "";
-        input.style.height = "auto";
+        input.value = ""; input.style.height = "auto";
 
-        generating = true;
-        sendBtn.disabled = true;
-        const typing = showTyping();
+        generating = true; sendBtn.disabled = true;
+        showTyping();
 
-        const response = await callAI(conversation);
-
+        const response = await callAI(conversation, false);
         removeTyping();
-        generating = false;
-        sendBtn.disabled = false;
+        generating = false; sendBtn.disabled = false;
 
         if (response) {
-            if (response.template) {
-                // AI returned a template
-                currentTemplate = response.template;
-                conversation.push({ role: "assistant", content: response.message || "Here's your report template:" });
-                addMessage("ai", response.message || "Here's your report template:");
-                addTemplatePreview(response.template);
-            } else if (response.message) {
-                // AI asking questions or responding
+            if (response.message) {
                 conversation.push({ role: "assistant", content: response.message });
                 addMessage("ai", response.message);
             }
+            // If AI suggested form field updates
+            if (response.fields) {
+                if (response.fields.Report_Name) document.getElementById("rpt-name").value = response.fields.Report_Name;
+                if (response.fields.Description) document.getElementById("rpt-desc").value = response.fields.Description;
+                if (response.fields.Link_Table) document.getElementById("rpt-link").value = response.fields.Link_Table;
+                if (response.fields.Data_Tables) document.getElementById("rpt-data").value = response.fields.Data_Tables;
+                if (response.fields.Filter_Mode) document.getElementById("rpt-mode").value = response.fields.Filter_Mode;
+                if (response.fields.Output) document.getElementById("rpt-output").value = response.fields.Output;
+                if (response.fields.Report_Requirements) document.getElementById("rpt-requirements").value = response.fields.Report_Requirements;
+                if (response.fields.Filters) document.getElementById("rpt-filters").value = response.fields.Filters;
+            }
+            // If template was generated
+            if (response.template) {
+                document.getElementById("rpt-template").value = response.template;
+                addMessage("system", "✅ Template generated and placed in the form.");
+            }
         }
-
         input.focus();
     };
 
-    // ── Template actions ──────────────────────────────────────────────────
-    window.copyTemplate = () => {
-        if (currentTemplate) {
-            navigator.clipboard.writeText(currentTemplate).then(() => {
-                addMessage("system", "Template copied to clipboard.");
-            });
+    // ── Generate Template ─────────────────────────────────────────────────
+    window.generateTemplate = async () => {
+        if (generating) return;
+        const requirements = document.getElementById("rpt-requirements").value.trim();
+        if (!requirements) { showStatus("Enter requirements first (use the chat to refine them).", "error"); return; }
+
+        generating = true; sendBtn.disabled = true;
+        addMessage("system", "🤖 Generating template...");
+        showTyping();
+
+        // Add a generate instruction to conversation
+        const genMessages = [...conversation, { role: "user", content: "Generate the HTML template now based on the current requirements. Output the complete template." }];
+
+        const response = await callAI(genMessages, true);
+        removeTyping();
+        generating = false; sendBtn.disabled = false;
+
+        if (response) {
+            if (response.template) {
+                document.getElementById("rpt-template").value = response.template;
+                addMessage("system", "✅ Template generated (" + response.template.length + " chars). Preview or save when ready.");
+                if (response.message) addMessage("ai", response.message);
+            } else if (response.message) {
+                addMessage("ai", response.message);
+            }
         }
     };
 
-    window.reviseTemplate = () => {
-        input.value = "Please revise the template: ";
-        input.focus();
+    // ── Preview ───────────────────────────────────────────────────────────
+    window.previewReport = async () => {
+        const templateHTML = document.getElementById("rpt-template").value;
+        if (!templateHTML) { showStatus("No template to preview.", "error"); return; }
+        try {
+            const dataTables = (document.getElementById("rpt-data").value || document.getElementById("rpt-link").value).split(",").map(t => t.trim()).filter(Boolean);
+            const data = {};
+            await Promise.all(dataTables.map(async (table) => { data[table] = await fetchTable(table); }));
+            data._meta = { reportName: "Preview", generatedAt: new Date().toLocaleString("en-GB") };
+
+            const template = Handlebars.compile(templateHTML);
+            const html = template(data);
+            document.getElementById("preview-frame").innerHTML = html;
+            document.getElementById("preview-area").style.display = "block";
+            showStatus("Preview rendered.", "success");
+        } catch(e) {
+            showStatus("Preview error: " + e.message, "error");
+        }
     };
 
-    window.saveTemplate = async () => {
-        if (!currentTemplate) return;
-
-        const name = prompt("Report name:", "AI Generated Report");
-        if (!name) return;
+    // ── Save Report ───────────────────────────────────────────────────────
+    window.saveReport = async () => {
+        const name = document.getElementById("rpt-name").value.trim();
+        const templateHTML = document.getElementById("rpt-template").value.trim();
+        if (!name) { showStatus("Report name is required.", "error"); return; }
+        if (!templateHTML) { showStatus("Template HTML is required.", "error"); return; }
 
         try {
             const fields = {
                 Report_Name: name,
-                Description: "Generated by AI Builder",
-                Link_Table: document.getElementById("cfg-link-table").value,
-                Data_Tables: document.getElementById("cfg-link-table").value,
-                Filter_Mode: document.getElementById("cfg-mode").value,
-                Output: document.getElementById("cfg-output").value,
-                Template_HTML: currentTemplate,
-                Filters: "",
-                Report_Requirements: conversation.filter(m => m.role === "user").map(m => m.content).join(" | "),
+                Description: document.getElementById("rpt-desc").value.trim(),
+                Link_Table: document.getElementById("rpt-link").value,
+                Data_Tables: document.getElementById("rpt-data").value.trim(),
+                Filter_Mode: document.getElementById("rpt-mode").value,
+                Output: document.getElementById("rpt-output").value,
+                Template_HTML: templateHTML,
+                Filters: document.getElementById("rpt-filters").value.trim(),
+                Report_Requirements: document.getElementById("rpt-requirements").value.trim(),
                 Active: true
             };
-
             await grist.docApi.applyUserActions([["AddRecord", REPORTS_TABLE, null, fields]]);
-            addMessage("system", '✅ "' + name + '" saved to ' + REPORTS_TABLE + '.');
+            showStatus('"' + name + '" saved.', "success");
+            addMessage("system", '💾 "' + name + '" saved to ' + REPORTS_TABLE + '.');
         } catch(e) {
-            addMessage("system", "⚠️ Save failed: " + e.message);
+            showStatus("Save failed: " + e.message, "error");
         }
     };
 
-    // ── Settings ──────────────────────────────────────────────────────────
-    window.toggleSettings = () => {
-        document.getElementById("settings").classList.toggle("visible");
-    };
-
-    // Save endpoint and token when they change
-    document.getElementById("cfg-endpoint").addEventListener("change", () => {
-        const endpoint = document.getElementById("cfg-endpoint").value.trim();
-        if (endpoint) grist.setOption("endpoint", endpoint);
-    });
-    document.getElementById("cfg-token").addEventListener("change", () => {
-        const token = document.getElementById("cfg-token").value.trim();
-        if (token) grist.setOption("authToken", token);
-    });
+    // ── Utilities ─────────────────────────────────────────────────────────
+    function showStatus(msg, type) {
+        const area = document.getElementById("status-area");
+        area.innerHTML = '<div class="status-msg status-' + type + '">' + msg + '</div>';
+        setTimeout(() => { area.innerHTML = ""; }, 5000);
+    }
 
     // ── Initialise ────────────────────────────────────────────────────────
-    console.log(WIDGET_NAME + " v" + WIDGET_VERSION + " loading...");
+    loadSettings();
 
     async function init() {
         try {
             schema = await getSchema();
-            statusEl.textContent = Object.keys(schema).length + " tables loaded";
+            statusEl.textContent = Object.keys(schema).length + " tables";
 
             // Populate link table dropdown
-            const linkSelect = document.getElementById("cfg-link-table");
+            const linkSelect = document.getElementById("rpt-link");
             Object.keys(schema).forEach(t => {
                 const opt = document.createElement("option");
                 opt.value = t; opt.textContent = t;
                 linkSelect.appendChild(opt);
             });
 
-            // Load saved endpoint from widget options
-            grist.onOptions((options) => {
-                if (options && options.endpoint) {
-                    document.getElementById("cfg-endpoint").value = options.endpoint;
-                }
-                if (options && options.authToken) {
-                    document.getElementById("cfg-token").value = options.authToken;
-                }
-            });
-
-            // Welcome message
-            addMessage("ai", "Hi! I can help you build a report template. Describe what you'd like — a dashboard, a detail card, a print layout — and I'll ask a few questions to get it right.");
-
+            addMessage("ai", "Hi! Describe the report you'd like to build. I'll ask a few questions to refine the requirements, then generate the template for you.\n\nYou can also fill in the form fields on the right manually — I'll use whatever's there as context.");
         } catch(e) {
             statusEl.textContent = "Error";
             addMessage("system", "⚠️ Could not connect to Grist: " + e.message);
