@@ -96,7 +96,11 @@
     </div>
     <div class="settings-row">
         <label>API Endpoint</label>
-        <input type="text" id="cfg-endpoint" placeholder="https://your-worker.workers.dev/generate" style="flex:1;">
+        <input type="text" id="cfg-endpoint" placeholder="https://your-worker.workers.dev" style="flex:1;">
+    </div>
+    <div class="settings-row">
+        <label>Auth Token</label>
+        <input type="password" id="cfg-token" placeholder="Your secret token" style="flex:1;">
     </div>
 </div>
 
@@ -220,9 +224,10 @@
         };
 
         try {
+            const token = document.getElementById("cfg-token").value.trim();
             const res = await fetch(endpoint, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "X-Auth-Token": token },
                 body: JSON.stringify(body)
             });
 
@@ -334,6 +339,16 @@
         document.getElementById("settings").classList.toggle("visible");
     };
 
+    // Save endpoint and token when they change
+    document.getElementById("cfg-endpoint").addEventListener("change", () => {
+        const endpoint = document.getElementById("cfg-endpoint").value.trim();
+        if (endpoint) grist.setOption("endpoint", endpoint);
+    });
+    document.getElementById("cfg-token").addEventListener("change", () => {
+        const token = document.getElementById("cfg-token").value.trim();
+        if (token) grist.setOption("authToken", token);
+    });
+
     // ── Initialise ────────────────────────────────────────────────────────
     console.log(WIDGET_NAME + " v" + WIDGET_VERSION + " loading...");
 
@@ -354,6 +369,9 @@
             grist.onOptions((options) => {
                 if (options && options.endpoint) {
                     document.getElementById("cfg-endpoint").value = options.endpoint;
+                }
+                if (options && options.authToken) {
+                    document.getElementById("cfg-token").value = options.authToken;
                 }
             });
 
