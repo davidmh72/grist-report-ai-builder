@@ -98,9 +98,12 @@
     <input type="text" id="cfg-endpoint" placeholder="https://your-worker.workers.dev" style="width:260px;">
     <span class="sep"></span>
     <label>Gemini Key:</label>
-    <input type="password" id="cfg-token" placeholder="Stored locally only">
+    <input type="password" id="cfg-token" placeholder="Stored in this browser only">
+    <span class="sep"></span>
+    <button class="btn" onclick="saveSettings()" style="padding:4px 10px; font-size:10px;">💾 Save</button>
     <span class="sep"></span>
     <label><input type="checkbox" id="cfg-transparency"> Show outgoing data</label>
+    <span style="margin-left:auto; font-size:9px; color:#999;">Settings saved in browser localStorage (never sent to server)</span>
 </div>
 
 <div class="main">
@@ -253,6 +256,7 @@
         const token = document.getElementById("cfg-token").value.trim();
         if (endpoint) localStorage.setItem("rpt_ai_endpoint", endpoint);
         if (token) localStorage.setItem("rpt_ai_apikey", token);
+        addMessage("system", "✅ Settings saved to browser.");
     }
     function loadSettings() {
         const endpoint = localStorage.getItem("rpt_ai_endpoint");
@@ -260,8 +264,6 @@
         if (endpoint) document.getElementById("cfg-endpoint").value = endpoint;
         if (token) document.getElementById("cfg-token").value = token;
     }
-    document.getElementById("cfg-endpoint").addEventListener("change", saveSettings);
-    document.getElementById("cfg-token").addEventListener("change", saveSettings);
 
     // ── Chat UI ───────────────────────────────────────────────────────────
     function addMessage(role, content) {
