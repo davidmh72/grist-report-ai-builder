@@ -251,13 +251,13 @@
     // ── Settings ──────────────────────────────────────────────────────────
     window.toggleSettings = () => document.getElementById("settings-bar").classList.toggle("visible");
 
-    function saveSettings() {
+    window.saveSettings = function() {
         const endpoint = document.getElementById("cfg-endpoint").value.trim();
         const token = document.getElementById("cfg-token").value.trim();
         if (endpoint) localStorage.setItem("rpt_ai_endpoint", endpoint);
         if (token) localStorage.setItem("rpt_ai_apikey", token);
         addMessage("system", "✅ Settings saved to browser.");
-    }
+    };
     function loadSettings() {
         const endpoint = localStorage.getItem("rpt_ai_endpoint");
         const token = localStorage.getItem("rpt_ai_apikey");
